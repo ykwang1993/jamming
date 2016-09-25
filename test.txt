@@ -1,0 +1,15 @@
+total N: 9696
+box size: 90.
+t end: 60.
+delta t: 0.00001
+kl long: 60.
+kl fene: 180.
+PBC state: 1
+
+moving boundary: 0
+moving dx: 0.0001
+initial thrusting force: 0.05
+middle point of moving boundary: 115.
+post moving dx: 0.0001
+post thrusting force: 0.05
+end boundary: 110.
