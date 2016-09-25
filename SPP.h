@@ -32,6 +32,17 @@
 typedef double real;
 
 typedef struct {
+	int PBC_state;
+	int moving_boundary;
+	real moving_dx;
+	real ini_thrust;
+	real mid_boundary;
+	real post_dx;
+	real post_thrust;
+	real end_boundary;
+} parameter;
+
+typedef struct {
 	real m; // mass
 	real x[DIM]; // position
 	real v[DIM]; // velocity
@@ -64,9 +75,9 @@ void insertList(ParticleList **root_list, ParticleList *i);
 void deleteList(ParticleList **q);
 void freeLists_LC(Cell* grid, int *nc);
 
-void inputParameters_LC(real *delta_t, real *t_end, int *N, int *nc, real *l, real *r_cut);
+parameter inputParameters_LC(real *delta_t, real *t_end, int *N, int *nc, real *l, real *r_cut);
 void RanInitial(Particle **order,int N);
-void initData_LC(int N, Cell *grid, int *nc, real *l, Particle **order);
+void initData_LC(int N, Cell *grid, int *nc, real *l, Particle **order, int ini_state, char *ini_pst);
 void PBC_fail(Cell *grid, int *nc);
 
 real makePBC(real x1, real x2, real xsize);
@@ -86,7 +97,7 @@ void updateV(Particle *p, real delta_t);
 void compX_LC(Cell *grid, int *nc, int *nc_moving, real *l, real delta_t);
 void compV_LC(Cell *grid, int *nc, int *nc_moving, real *l, real delta_t);
 void moving_boundary(Cell* grid, int *nc, int *nc_moving, real* l, real dx, real r_cut);
-void timeIntegration_LC(real t, real delta_t, real t_end, Cell* grid, int *nc, real* l, real r_cut, int N, Particle **order);
+void timeIntegration_LC(real t, real delta_t, real t_end, Cell* grid, int *nc, real* l, real r_cut, int N, Particle **order, parameter para);
 
 
 

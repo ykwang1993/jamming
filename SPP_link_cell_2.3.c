@@ -27,26 +27,38 @@ real kl_long,kl_short,k_fene;
 
 int main(int argc, char *argv[])
 {
-
+	
+	/*
+		deal with the input argument directly from terminal or cmd
+		-p is the path of saving position
+		-i is the path of initial condition
+	*/
+	int ini_state=0; //if ini_state, then adopt the input initial condition 
+	char ini_pst[80];
 	char ch; 
-	while ((ch = getopt(argc, argv, "p:f")) != EOF)
+	while ((ch = getopt(argc, argv, "p:i:")) != EOF)
 		switch (ch) {
 			case 'p': 
 				printf("%c %s\n", ch, optarg);
 				strcpy(dir,optarg);
 				printf("%s\n", dir);
 				break;
-			case 'f':
-				printf("%c\n", ch);
+			case 'i':
+				ini_state=1;
+				printf("%c %s\n", ch, optarg);
+				strcpy(ini_pst,optarg);
+				printf("%s\n", ini_pst);
 				break;
 		}
 
     int nc[DIM];
     int N, pnc;
+	parameter para;
 
     real l[DIM], r_cut;
     real delta_t, t_end;
-    inputParameters_LC(&delta_t, &t_end, &N, nc, l, &r_cut);
+    para = inputParameters_LC(&delta_t, &t_end, &N, nc, l, &r_cut);
+	
     pnc=1;
     for (int d=0; d<DIM; d++)
         pnc *= nc[d];
@@ -54,8 +66,8 @@ int main(int argc, char *argv[])
 
     Particle **order = malloc(N*sizeof(Particle*));
 
-    initData_LC(N, grid, nc, l, order);
-    timeIntegration_LC(0, delta_t, t_end, grid, nc, l, r_cut, N, order);
+    initData_LC(N, grid, nc, l, order, ini_state, ini_pst);
+    timeIntegration_LC(0, delta_t, t_end, grid, nc, l, r_cut, N, order, para);
     freeLists_LC(grid, nc);
 
     free(grid);
@@ -68,18 +80,35 @@ int main(int argc, char *argv[])
 
 }
 
-void inputParameters_LC(real *delta_t, real *t_end, int *N, int *nc, real *l, real *r_cut){
+parameter inputParameters_LC(real *delta_t, real *t_end, int *N, int *nc, real *l, real *r_cut){
 
-
-	char path[80];
 	
-	scanf("%d %lf %lf %lf",N,&kl_long,&kl_short,&k_fene);
-
-    l[0] = 120.;
-    l[1] = 120.;
-    *delta_t = 5e-5;
+	char path[80];
+	real box_size=100.;
+	parameter para;
+	
+	
+	scanf("total N: %d\n",N);
+	scanf("box size: %lf\n",&box_size);
+	scanf("t end: %lf\n",t_end);
+	scanf("delta t: %lf\n",delta_t);
+	scanf("kl long: %lf\n",&kl_long);
+	scanf("kl fene: %lf\n",&k_fene);
+	scanf("PBC state: %d\n\n",&(para.PBC_state));
+	
+	scanf("moving boundary: %d\n",&(para.moving_boundary));
+	scanf("moving dx: %lf\n",&(para.moving_dx));
+	scanf("initial thrusting force: %lf\n",&(para.ini_thrust));
+	scanf("middle point of moving boundary: %lf\n", &(para.mid_boundary));
+	scanf("post moving dx: %lf\n", &(para.post_dx));
+	scanf("post thrusting force: %lf\n", &(para.post_thrust));
+	scanf("end boundary: %lf\n", &(para.end_boundary));
+	
+	
+	kl_short=kl_long;
+    l[0] = box_size;
+    l[1] = box_size;
     *r_cut = 2.5;
-    *t_end = 120.;
 
     nc[0] = (int)floor(l[0]/(*r_cut));
     nc[1] = (int)floor(l[1]/(*r_cut));
@@ -93,14 +122,25 @@ void inputParameters_LC(real *delta_t, real *t_end, int *N, int *nc, real *l, re
 	FILE *file = fopen(path,"w");
 	
 	fprintf(file,"total N: %d\n",*N);
-	fprintf(file,"t_end: %e\n",*t_end);
-	fprintf(file,"delta_t: %e\n",*delta_t);
-	fprintf(file,"kl_long: %e\n",kl_long);
-	fprintf(file,"kl_short: %e\n",kl_short);
-	fprintf(file,"k_fene: %e\n",k_fene);
-	fprintf(file,"nc=[%d,%d] pnc=%d",nc[0],nc[1],pnc);
+	fprintf(file,"box size: %f\n",box_size);
+	fprintf(file,"t end: %f\n",*t_end);
+	fprintf(file,"delta t: %f\n",*delta_t);
+	fprintf(file,"kl long: %f\n",kl_long);
+	fprintf(file,"k fene: %f\n",k_fene);
+	fprintf(file,"nc=[%d,%d] pnc=%d\n",nc[0],nc[1],pnc);
+	fprintf(file,"PBC state: %d\n",para.PBC_state);
+	fprintf(file,"\n");
+	fprintf(file,"moving boundary: %d\n",para.moving_boundary);
+	fprintf(file,"moving dx: %f\n",para.moving_dx);
+	fprintf(file,"initial thrusting force: %f\n",para.ini_thrust);
+	fprintf(file,"middle point of moving boundary: %f\n", para.mid_boundary);
+	fprintf(file,"post moving dx: %f\n", para.post_dx);
+	fprintf(file,"post thrusting force: %f\n", para.post_thrust);
+	fprintf(file,"end boundary: %f\n", para.end_boundary);
 	
 	fclose(file);
+	
+	return para;
 
 }
 
@@ -132,13 +172,12 @@ void RanInitial(Particle **order,int N)
 	
 }
 
-void initData_LC(int N, Cell *grid, int *nc, real *l, Particle **order){
+void initData_LC(int N, Cell *grid, int *nc, real *l, Particle **order, int ini_state, char *ini_pst){
 
 	char path[80];
     int pnc=1,kc[DIM],iniCol=96,yCount=1,ySign=1;
     real x0,y0,db=1.12*D;
     ParticleList *current;
-
 
     for (int d=0; d<DIM; d++)
         pnc *= nc[d];
@@ -146,53 +185,93 @@ void initData_LC(int N, Cell *grid, int *nc, real *l, Particle **order){
     for (int i=0; i<pnc; i++)
         grid[i]=NULL;
 
-    x0=0.5*db;
-    y0=60.;
+	
+	if (ini_state){
+		
+		FILE *file = fopen(ini_pst,"r");
+		real x, y, x_v, y_v;
+		
+		for (int i=1; i<=N; i++){
 
-    for (int i=1; i<=N; i++){
+			current = (ParticleList*)malloc(sizeof(ParticleList));
+			order[i-1]=&(current->p);
+			
+			/*
+				initialize by the input file
+			*/
+			fscanf(file,"%le    %le    %le    %le\n", &x, &y, &x_v, &y_v);
+			current->p.x[0]=x;
+			current->p.x[1]=y;
+			current->p.v[0]=0.;
+			current->p.v[1]=0.;
 
-        current = (ParticleList*)malloc(sizeof(ParticleList));
-        order[i-1]=&(current->p);
+			current->next=NULL;
 
-        if (i==1){
-            current->p.x[0]=x0;
-            current->p.x[1]=y0;
-            current->p.v[0]=0.;
-            current->p.v[1]=0.;
-        }
-        else{
-            current->p.x[0]=order[i-2]->x[0]+db;
-            current->p.x[1]=0.;
-            current->p.v[0]=0.;
-            current->p.v[1]=0.;
+			for (int d=0; d<DIM; d++)
+				kc[d] = (int)floor(current->p.x[d] * nc[d] / l[d]);
+
+			if(NULL==grid[index(kc,nc)])
+				grid[index(kc,nc)]=current;
+			else
+				insertList(&grid[index(kc,nc)],current);	
+		}
+		
+		fclose(file);
+	}
+	else{
+		x0=0.5*db;
+		y0=60.;
+
+		for (int i=1; i<=N; i++){
+
+			current = (ParticleList*)malloc(sizeof(ParticleList));
+			order[i-1]=&(current->p);
+			
+
+				
+			if (i==1){
+				current->p.x[0]=x0;
+				current->p.x[1]=y0;
+				current->p.v[0]=0.;
+				current->p.v[1]=0.;
+			}
+			else{
+				current->p.x[0]=order[i-2]->x[0]+db;
+				current->p.x[1]=0.;
+				current->p.v[0]=0.;
+				current->p.v[1]=0.;
 
 
-            if (i%iniCol == 1) {
-                current->p.x[0]=x0;
-                current->p.x[1]=y0-(ySign*yCount*db);
-                y0=current->p.x[1];
-				ySign*=-1;
-				yCount+=1;
-            } else current->p.x[1]=y0;
-        }
+				if (i%iniCol == 1) {
+					current->p.x[0]=x0;
+					current->p.x[1]=y0-(ySign*yCount*db);
+					y0=current->p.x[1];
+					ySign*=-1;
+					yCount+=1;
+				} else current->p.x[1]=y0;
+			}
+			
 
-        current->next=NULL;
+			current->next=NULL;
 
-        for (int d=0; d<DIM; d++)
-            kc[d] = (int)floor(current->p.x[d] * nc[d] / l[d]);
+			for (int d=0; d<DIM; d++)
+				kc[d] = (int)floor(current->p.x[d] * nc[d] / l[d]);
 
-        if(NULL==grid[index(kc,nc)])
-            grid[index(kc,nc)]=current;
-        else
-            insertList(&grid[index(kc,nc)],current);
-
-        
-    }
+			if(NULL==grid[index(kc,nc)])
+				grid[index(kc,nc)]=current;
+			else
+				insertList(&grid[index(kc,nc)],current);	
+		}
+		
+		RanInitial(order, N);
+	}
+	
+    
 
     
 	
 	sprintf(path,"%s/ini.txt",dir);
-	RanInitial(order, N);
+	
 	
 	FILE *file = fopen(path,"w");
 	outputResults_LC(N,order,file);
@@ -331,7 +410,7 @@ void compF_LC(Cell *grid, int *nc, int *nc_moving, real *l, real r_cut, int PBC_
 				Particle wall_particle;
 				real r_wall=0.;
 				int flag_wall=0;
-				if(PBC_state)
+				if(1-PBC_state)
 					for (int d=0; d<DIM; d++){
 						flag_wall=0;
 						if(ic[d]==(nc_moving[d]-1)){
@@ -561,13 +640,13 @@ void moving_boundary(Cell* grid, int *nc, int *nc_moving, real* l, real dx, real
 	
 }
 
-void timeIntegration_LC(real t, real delta_t, real t_end, Cell* grid, int *nc, real* l, real r_cut, int N, Particle **order) {
+void timeIntegration_LC(real t, real delta_t, real t_end, Cell* grid, int *nc, real* l, real r_cut, int N, Particle **order, parameter para) {
 
     int count=0,file_name=0;
     char path[12];
-	int PBC_state=1; 
-	real dx=0.0001;
-	real thrust=0.01;
+	int PBC_state=para.PBC_state;
+	real dx=para.moving_dx;
+	real thrust=para.ini_thrust;
 	int nc_moving[DIM];
 	for(int d=0;d<DIM;d++)
 		nc_moving[d]=nc[d];
@@ -579,31 +658,26 @@ void timeIntegration_LC(real t, real delta_t, real t_end, Cell* grid, int *nc, r
 
 	//compF_LC(grid,nc,r_cut);
 	while (t < t_end) {
-		t += delta_t;
-		
-		
-		//if(((float)count)/200==250.) PBC_state=0;
-		if(l[0]<90. && PBC_state){
-			PBC_state=0;
-			thrust=0.05;
-		}
-			
+		t += delta_t;	
 		
 		compF_LC(grid,nc,nc_moving,l,r_cut,PBC_state);
 		compF_Intr(order,N,l,seed,thrust);
 		compV_LC(grid,nc,nc_moving,l,delta_t);
 		compX_LC(grid,nc,nc_moving,l,delta_t);
 		
-		if(l[0]>90.){
-			if(l[0]<100.)
-				dx=0.00002;
-			moving_boundary(grid,nc,nc_moving,l,dx,r_cut);
-		}
-		
-		
+		if ((1-PBC_state) && para.moving_boundary){
 			
-
-
+			if(l[0]<para.end_boundary){
+				PBC_state=1;
+				thrust=para.post_thrust;
+			}
+			
+			if(l[0]>para.end_boundary){
+				if(l[0]<para.mid_boundary)
+					dx=para.post_dx;
+				moving_boundary(grid,nc,nc_moving,l,dx,r_cut);
+			}	
+		}		
 
 		count++;
 		if(count%200 == 0){
